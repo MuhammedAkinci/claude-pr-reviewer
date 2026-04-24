@@ -1,0 +1,65 @@
+name: "Claude PR Review"
+description: "Automatically review pull requests using the Anthropic Claude API."
+author: "makinci"
+branding:
+  icon: "check-circle"
+  color: "purple"
+
+inputs:
+  anthropic_api_key:
+    description: "Anthropic API key used to call the Claude API."
+    required: true
+  github_token:
+    description: "GitHub token used to read PR diffs and post review comments. Defaults to the workflow token."
+    required: false
+    default: ${{ github.token }}
+  model:
+    description: "Claude model ID (e.g. claude-sonnet-4-6, claude-opus-4-7)."
+    required: false
+    default: "claude-sonnet-4-6"
+  review_level:
+    description: "Review strictness: strict | balanced | lenient."
+    required: false
+    default: "balanced"
+  ignore_file:
+    description: "Path (relative to repo root) of a .gitignore-style file listing paths to skip."
+    required: false
+    default: ".claude-review-ignore"
+  max_diff_chars:
+    description: "If the full diff exceeds this many characters, review each file independently."
+    required: false
+    default: "100000"
+  max_tokens:
+    description: "Max output tokens per Claude response."
+    required: false
+    default: "4096"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r "${{ github.action_path }}/requirements.txt"
+
+    - name: Run Claude PR review
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_REVIEW_LEVEL: ${{ inputs.review_level }}
+        INPUT_IGNORE_FILE: ${{ inputs.ignore_file }}
+        INPUT_MAX_DIFF_CHARS: ${{ inputs.max_diff_chars }}
+        INPUT_MAX_TOKENS: ${{ inputs.max_tokens }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_WORKSPACE: ${{ github.workspace }}
+      run: python "${{ github.action_path }}/review.py"

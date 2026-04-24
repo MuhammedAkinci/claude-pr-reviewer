@@ -1,0 +1,72 @@
+name: Self-Test
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  smoke-test:
+    name: Smoke test the action
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint
+        run: ruff check review.py
+
+      - name: Syntax check
+        run: python -m py_compile review.py
+
+      - name: Validate action metadata
+        run: |
+          python - <<'PY'
+          import sys
+          try:
+              import yaml
+          except ImportError:
+              import subprocess
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml"])
+              import yaml
+          with open("action.yml") as f:
+              meta = yaml.safe_load(f)
+          assert "inputs" in meta, "action.yml missing 'inputs'"
+          assert "anthropic_api_key" in meta["inputs"], "missing anthropic_api_key input"
+          assert meta["inputs"]["anthropic_api_key"].get("required") is True
+          assert meta["runs"]["using"] == "composite"
+          print("action.yml OK")
+          PY
+
+  review:
+    name: Run self-review
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: smoke-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude PR Review (self)
+        uses: ./
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          review_level: balanced
